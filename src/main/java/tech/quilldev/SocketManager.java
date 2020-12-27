@@ -2,7 +2,6 @@ package tech.quilldev;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public class SocketManager {
@@ -50,6 +49,22 @@ public class SocketManager {
     }
 
     /**
+     * Send a packet to all other sockets besides the one it came from
+     * @param socket it came from
+     */
+    public void sendPacketToOtherSockets(QuillSocket socket, Packet packet){
+        for(QuillSocket qSocket : this.sockets){
+
+            //if we're on the same socket, skip
+            if(socket.getAddress().equals(qSocket.getAddress())){
+                continue;
+            }
+
+            //get the packets write data
+            qSocket.writeLineAsync(packet.getWriteData());
+        }
+    }
+    /**
      * Receive data from all sockets & process it
      */
     public void receiveData() {
@@ -59,14 +74,18 @@ public class SocketManager {
             for (var socket : sockets) {
 
                 // read all of the sockets
-                socket.readSocketAsync();
+                var packets = socket.readSocketSync();
+
+                //send the packet to all other sockets
+                for(var packet : packets){
+                    sendPacketToOtherSockets(socket, packet);
+                }
             }
         }).start();
     }
 
     /**
      * Send a string packet (JSON FORMAT)
-     * 
      * @param packet to send
      */
     public void sendPacket(String packet) {
@@ -107,9 +126,6 @@ public class SocketManager {
 
                         // add the socket to the socket list
                         sockets.add(qSocket);
-
-                        // log that we got a new connection
-                        System.out.println("SOCKET CONNECTED: " + qSocket.getAddress());
                     }
 
                 } catch (IOException ignored) {
