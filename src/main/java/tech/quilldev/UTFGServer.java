@@ -6,6 +6,6 @@ package tech.quilldev;
  */
 public class UTFGServer {
     public static void main(String[] args) {
-        var server = new ServerManager(2069);
+        var server = new ServerManager(2090);
     }
 }

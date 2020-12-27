@@ -2,13 +2,12 @@ package tech.quilldev;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public class SocketManager {
 
-    private final ArrayList<Socket> sockets;
+    private final ArrayList<QuillSocket> sockets;
     private final ServerSocket serverSocket;
 
     public SocketManager(int port) {
@@ -21,18 +20,33 @@ public class SocketManager {
     /**
      * Handle any data that passes through the server
      */
-    public void handle(){
+    public void handle() {
         this.receiveData();
     }
 
     /**
      * Check whether sockets are alive, or na!
      */
-    public void checkLifelines(){
-        new Thread( () -> {
+    public void checkLifelines() {
+
+        // if there are no sockets, return
+        if (sockets.size() == 0) {
+            return;
+        }
+
+        //Make a new thread and check whether sockets are alive
+        new Thread(() -> {
+
             System.out.printf("Checking connections of %s sockets\n", this.sockets.size());
-            this.sendPacket("meme\n");
-        }).start();;
+
+            // Remove dead sockets
+            for (var socket : sockets) {
+                // if the socket is dead, disconnect it
+                if (!socket.alive()) {
+                    disconnectSocket(socket);
+                }
+            }
+        }).start();
     }
 
     /**
@@ -40,63 +54,37 @@ public class SocketManager {
      */
     public void receiveData() {
 
-        //read data from all of the sockets
-        for (var socket : sockets) {
+        new Thread(() -> {
+            // read data from all of the sockets
+            for (var socket : sockets) {
 
-            try {
-
-                //Read all available bites from the client
-                var stream = socket.getInputStream();
-                var bytes = stream.readNBytes(stream.available());
-
-                //string builder for building bytes into strings
-                var byteString = new StringBuilder();
-
-                //decode bytes to chars
-                for (var b : bytes) {
-                    byteString.append((char) b);
-                }
-
-                //just send that shit right back, but... to all sockets~!
-                this.sendPacket(byteString.toString());
+                // read all of the sockets
+                socket.readSocketAsync();
             }
-            catch (IOException e){
-                this.disconnectSocket(socket);
-                e.printStackTrace();
-            }
-        }
+        }).start();
     }
 
     /**
      * Send a string packet (JSON FORMAT)
+     * 
      * @param packet to send
      */
-    public void sendPacket(String packet){
-        //Write data to all sockets
-        for(var socket : sockets) {
-            try {
-
-                //get the output stream
-                var stream = socket.getOutputStream();
-
-                //try to write data to the socket
-                stream.write(packet.getBytes(StandardCharsets.UTF_8));
-
-                //flush the stream
-                stream.flush();
-            } catch (IOException e) {
-                this.disconnectSocket(socket);
-            }
+    public void sendPacket(String packet) {
+        // Write data to all sockets
+        for (var socket : sockets) {
+            socket.writeLineAsync(packet);
         }
     }
 
     /**
      * Disconnect the given socket
+     * 
      * @param socket to disconnect
      */
-    private void disconnectSocket(Socket socket){
+    private void disconnectSocket(QuillSocket socket) {
+        socket.close();
         sockets.remove(socket);
-        System.out.println("SOCKET DISCONNECTED: " + socket.getInetAddress().toString() + ":" + socket.getPort());
+        System.out.println("SOCKET DISCONNECTED: " + socket.getAddress());
     }
 
     /**
@@ -104,25 +92,27 @@ public class SocketManager {
      */
     public void acceptNewConnections() {
 
-        new Thread( () -> {
-            while(true){
+        new Thread(() -> {
+            while (true) {
                 try {
 
-                    //the socket to accept
+                    // the socket to accept
                     var socket = this.serverSocket.accept();
 
                     // if the socket is connected print out a connection message!
                     if (socket.isConnected()) {
 
-                        //add the socket to the socket list
-                        sockets.add(socket);
+                        // create a quillsocket from that socket
+                        var qSocket = new QuillSocket(socket);
 
-                        //log that we got a new connection
-                        System.out.println("SOCKET CONNECTED: " + socket.getInetAddress().toString() + ":" + socket.getPort());
+                        // add the socket to the socket list
+                        sockets.add(qSocket);
+
+                        // log that we got a new connection
+                        System.out.println("SOCKET CONNECTED: " + qSocket.getAddress());
                     }
 
-                } catch (IOException e) {
-                    e.printStackTrace();
+                } catch (IOException ignored) {
                     System.out.println("Failed to accept the socket!");
                 }
             }
